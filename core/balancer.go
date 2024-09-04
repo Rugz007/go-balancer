@@ -1,8 +1,11 @@
 package core
 
 import (
+	"fmt"
+
 	round_robin "github.com/rugz007/go-balancer/internal/algorithms/round-robin"
 	types "github.com/rugz007/go-balancer/types"
+	"github.com/valyala/fasthttp"
 )
 
 func CreateBalancer(config *types.Config) types.Balancer {
@@ -14,4 +17,35 @@ func CreateBalancer(config *types.Config) types.Balancer {
 		return round_robin.CreateRoundRobin(*config)
 	}
 	return nil
+}
+
+func CreateBalancerServer(config *types.Config) {
+	balancer := CreateBalancer(config)
+	// Create a request handler
+	requestHandler := func(ctx *fasthttp.RequestCtx) {
+		err := balancer.MakeRequest(ctx)
+		if err != nil {
+			if config.DropRequestOnFail {
+				ctx.Error(err.Error(), fasthttp.StatusInternalServerError)
+			} else {
+				retries := config.RetriesOnFail
+				for retries > 0 {
+					err = balancer.MakeRequest(ctx)
+					if err == nil {
+						break
+					}
+					retries--
+				}
+				if err != nil {
+					ctx.Error(err.Error(), fasthttp.StatusInternalServerError)
+				} else {
+					fmt.Fprintf(ctx, "Retried request successfully after %d retries", config.RetriesOnFail-retries)
+				}
+			}
+		}
+	}
+
+	if err := fasthttp.ListenAndServe(fmt.Sprintf(":%d", config.Port), requestHandler); err != nil {
+		fmt.Printf("Error in ListenAndServe: %s\n", err)
+	}
 }

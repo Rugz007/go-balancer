@@ -17,15 +17,18 @@ type Backend struct {
 }
 
 type Config struct {
-	Backends  []Backend
-	Port      int
-	Headers   map[string]string
-	Algorithm string
+	Backends          []Backend
+	Port              int
+	Headers           map[string]string
+	Algorithm         string
+	DropRequestOnFail bool
+	RetriesOnFail     int
 }
 
 type Balancer interface {
 	Next() *BackendProxy
 	HealthCheck()
+	MakeRequest(ctx *fasthttp.RequestCtx) error
 }
 
 type BackendProxy struct {

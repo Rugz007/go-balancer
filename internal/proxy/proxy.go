@@ -24,7 +24,7 @@ func CreateProxyClient(backend types.Backend) types.BackendProxy {
 	}
 }
 
-func HandleRequestViaProxy(bp *types.BackendProxy, ctx *fasthttp.RequestCtx) {
+func HandleRequestViaProxy(bp *types.BackendProxy, ctx *fasthttp.RequestCtx) error {
 	proxyUrl := bp.Backend.Url + string(ctx.Request.URI().RequestURI())
 	req := &ctx.Request
 	resp := &ctx.Response
@@ -36,11 +36,9 @@ func HandleRequestViaProxy(bp *types.BackendProxy, ctx *fasthttp.RequestCtx) {
 
 	if bp.Backend.HealthCheckPath != "" && string(ctx.Path()) == bp.Backend.HealthCheckPath {
 		resp.SetStatusCode(fasthttp.StatusOK)
-		return
+		return nil
 	}
 
 	err := bp.Client.Do(req, resp)
-	if err != nil {
-		ctx.Error(err.Error(), fasthttp.StatusServiceUnavailable)
-	}
+	return err
 }

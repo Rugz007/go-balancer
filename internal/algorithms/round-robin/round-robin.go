@@ -1,14 +1,17 @@
 package round_robin
 
 import (
+	"fmt"
+
 	"github.com/rugz007/go-balancer/types"
+	"github.com/valyala/fasthttp"
 
 	"github.com/rugz007/go-balancer/internal/proxy"
 	"github.com/rugz007/go-balancer/internal/util"
 )
 
 type RoundRobinBackend struct {
-	proxy     *types.BackendProxy
+	types.BackendProxy
 	index     int
 	isHealthy bool
 }
@@ -32,9 +35,9 @@ func CreateRoundRobin(config types.Config) *RoundRobin {
 	for i, backend := range config.Backends {
 		proxy := proxy.CreateProxyClient(backend)
 		roundRobin.backends = append(roundRobin.backends, &RoundRobinBackend{
-			proxy:     &proxy,
-			index:     i,
-			isHealthy: true,
+			BackendProxy: proxy,
+			index:        i,
+			isHealthy:    true,
 		})
 	}
 	return roundRobin
@@ -52,7 +55,21 @@ func (rr *RoundRobin) Next() *types.BackendProxy {
 	if !backend.isHealthy {
 		return rr.Next()
 	}
-	return backend.proxy
+	return &backend.BackendProxy
+}
+
+func (rr *RoundRobin) MakeRequest(ctx *fasthttp.RequestCtx) error {
+
+	backend := rr.Next()
+	err := proxy.HandleRequestViaProxy(backend, ctx)
+	fmt.Print("Making request from backend: ", backend.Backend.Url, "\n")
+	if err != nil {
+		rr.backends[rr.current].isHealthy = false
+		return err
+	}
+	rr.backends[rr.current].isHealthy = true
+	return nil
+
 }
 
 // TODO: Implement HealthCheck method in a better way
@@ -63,6 +80,6 @@ func (rr *RoundRobin) HealthCheck() {
 	for _, backend := range rr.backends {
 		// Perform health check
 		// and update isHealthy field
-		util.IsHostAlive(backend.proxy.Client, backend.proxy.Backend.Url)
+		util.IsHostAlive(backend.Client, backend.Backend.Url)
 	}
 }
